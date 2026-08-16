@@ -1,0 +1,199 @@
+#include <WiFi.h>
+#include <SPI.h>
+#include <MFRC522.h>
+#include <time.h>
+
+#define SS_PIN 5
+#define RST_PIN 21
+
+const char* ssid = "Wokwi-GUEST";
+const char* password = "";
+
+// India time = UTC + 5 hours 30 minutes
+const long GMT_OFFSET_SEC = 19800;
+const int DAYLIGHT_OFFSET_SEC = 0;
+
+MFRC522 rfid(SS_PIN, RST_PIN);
+
+void setup() {
+
+  Serial.begin(115200);
+
+  // RFID
+  SPI.begin();
+  rfid.PCD_Init();
+
+  // Wi-Fi
+  WiFi.begin(ssid, password);
+
+  Serial.print("Connecting to WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.println("WiFi Connected!");
+
+  // Get real date and time from NTP
+  configTime(
+    GMT_OFFSET_SEC,
+    DAYLIGHT_OFFSET_SEC,
+    "pool.ntp.org",
+    "time.nist.gov"
+  );
+
+  Serial.println("Synchronizing time...");
+
+  struct tm timeinfo;
+
+  while (!getLocalTime(&timeinfo)) {
+    Serial.print(".");
+    delay(500);
+  }
+
+  Serial.println();
+  Serial.println("Time synchronized!");
+
+  Serial.println();
+  Serial.println("================================");
+  Serial.println("     SMART ATTENDANCE SYSTEM");
+  Serial.println("================================");
+  Serial.println("Scan your RFID card...");
+}
+
+
+String getUID() {
+
+  String uid = "";
+
+  for (byte i = 0; i < rfid.uid.size; i++) {
+
+    if (rfid.uid.uidByte[i] < 0x10) {
+      uid += "0";
+    }
+
+    uid += String(rfid.uid.uidByte[i], HEX);
+
+    if (i < rfid.uid.size - 1) {
+      uid += ":";
+    }
+  }
+
+  uid.toUpperCase();
+
+  return uid;
+}
+
+
+void checkAttendance(String uid) {
+
+  // Get current date and time
+  struct tm timeinfo;
+
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Could not get time!");
+    return;
+  }
+
+  // Date
+  char dateString[20];
+
+  strftime(
+    dateString,
+    sizeof(dateString),
+    "%d-%m-%Y",
+    &timeinfo
+  );
+
+  // Time
+  char timeString[20];
+
+  strftime(
+    timeString,
+    sizeof(timeString),
+    "%H:%M:%S",
+    &timeinfo
+  );
+
+
+  String name = "UNKNOWN";
+
+
+  // Check RFID UID
+
+  if (uid == "11:22:33:44") {
+    name = "Loki";
+  }
+
+  else if (uid == "55:66:77:88") {
+    name = "Arun";
+  }
+
+  else if (uid == "01:02:03:04") {
+    name = "Kumar";
+  }
+
+  else if (uid == "AA:BB:CC:DD") {
+    name = "Priya";
+  }
+
+  else if (uid == "04:11:22:33") {
+    name = "Ravi";
+  }
+
+  else if (uid == "C0:FF:EE:99") {
+    name = "Suresh";
+  }
+
+
+  Serial.println();
+  Serial.println("================================");
+
+  Serial.print("Card UID : ");
+  Serial.println(uid);
+
+  Serial.print("Name     : ");
+  Serial.println(name);
+
+  Serial.print("Date     : ");
+  Serial.println(dateString);
+
+  Serial.print("Time     : ");
+  Serial.println(timeString);
+
+
+  if (name != "UNKNOWN") {
+
+    Serial.println("Status   : PRESENT");
+
+  } else {
+
+    Serial.println("Status   : UNKNOWN CARD");
+
+  }
+
+  Serial.println("================================");
+}
+
+
+void loop() {
+
+  if (!rfid.PICC_IsNewCardPresent()) {
+    return;
+  }
+
+  if (!rfid.PICC_ReadCardSerial()) {
+    return;
+  }
+
+  String uid = getUID();
+
+  checkAttendance(uid);
+
+  rfid.PICC_HaltA();
+  rfid.PCD_StopCrypto1();
+
+  delay(2000);
+}
